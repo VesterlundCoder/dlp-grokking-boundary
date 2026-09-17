@@ -1,0 +1,11 @@
+{
+  "run_id": "q113_additive_integer_paper1_s456",
+  "n_params": 427253,
+  "n_core_params": 396544,
+  "best_test": 1.0,
+  "best_epoch": 38599,
+  "final_train": 1.0,
+  "final_test": 0.9983069977426636,
+  "total_epochs": 58600,
+  "total_time_s": 3994.826788187027
+}

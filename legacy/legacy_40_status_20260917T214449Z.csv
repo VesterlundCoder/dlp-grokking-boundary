@@ -1,0 +1,5 @@
+run_id,pid_or_slurm_id,representation,tokenizer,optimizer,seed,current_step,max_step,percent_complete,output_directory,checkpoint_path,status,evidence_class
+q113_additive_integer_paper1_s123,local_mps,additive,integer,paper1,s123,33400,100000,100.0,results/matched_isomorphic/q113_additive_integer_paper1_s123,none,DONE,LEGACY_EXPLORATORY_V0
+q113_additive_integer_paper1_s42,local_mps,additive,integer,paper1,s42,70200,100000,100.0,results/matched_isomorphic/q113_additive_integer_paper1_s42,none,DONE,LEGACY_EXPLORATORY_V0
+q113_additive_integer_paper1_s456,local_mps,additive,integer,paper1,s456,58600,100000,100.0,results/matched_isomorphic/q113_additive_integer_paper1_s456,none,DONE,LEGACY_EXPLORATORY_V0
+q113_additive_integer_paper1_s789,local_mps,additive,integer,paper1,s789,16700,100000,16.7,results/matched_isomorphic/q113_additive_integer_paper1_s789,none,STOPPED,LEGACY_EXPLORATORY_V0

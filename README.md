@@ -1,111 +1,129 @@
-# The Discrete-Log Learnability Boundary
+# Predicting the Discrete-Log Learnability Boundary
 
-Code and data for the preprint **"The Discrete-Log Learnability Boundary: Representation, Scale, and Gradient Hardness in Isomorphic Cyclic Groups"** by David Vesterlund.
+Code and data for the preprint **"Predicting the Discrete-Log Learnability Boundary: Representation, Spectral Accessibility, and Grokking"** by David Vesterlund.
 
 ## Overview
 
-This repository contains the experimental code, results, and analysis scripts for a systematic study of when and why neural networks can learn the discrete logarithm problem (DLP) through gradient-based training.
+**Central question:** Can representation-level and architecture-conditioned spectral measurements obtained *before training* prospectively predict whether a DLP formulation will directly generalize, grok after memorization, memorize without generalizing, or fail to fit?
 
-**Central question:** Is neural learnability invariant under isomorphic representations of the same abstract cyclic group?
+This is a **prospective prediction study** with strict locking protocols. Predictions must precede the training they predict.
 
-For a prime $q$, the additive group $(\mathbb{Z}_q, +)$ and a multiplicative subgroup $\langle g_0 \rangle \subset \mathbb{F}_p^*$ of order $q$ are abstractly isomorphic. We test whether two tasks that are mathematically isomorphic at the group level can have dramatically different learning dynamics when presented to a neural network through different concrete representations.
+## Key Design Principles
 
-## Key Findings (so far)
-
-1. **Stage 2 of the prior version was NOT modular addition.** A forensic audit revealed that the prior paper's claim about "group-structure-dependent grokking" was based on a misidentified experiment. See `AUDIT_REPORT.md`.
-
-2. **MLP replication confirms gradient-concentration hardness.** Direct generalization at $b=16$ transitions to memorization-only at $b \geq 20$, consistent with the asymptotic theorem of Takhanov et al.
-
-3. **Matched isomorphic experiment is running.** 40 runs at $q=113$ testing additive vs. multiplicative × integer vs. bit tokenizer × Paper 1 vs. Paper 2 optimization × 5 seeds.
+1. **Prediction precedes training.** No confirmatory run may start without a valid prediction lock.
+2. **Two predictor classes:** P0 (strict pre-training, t=0 only) and P1 (early-training, 1% probe window).
+3. **Primary causal intervention: GF(2) affine bijections.** Same bits, same length, same alphabet, same information, same labels, different coordinate geometry.
+4. **Literature positioning:** We do NOT claim NTK-target alignment is novel (Kumar et al.). We test whether spectral accessibility can *prospectively predict* learning phase.
+5. **Falsifiable:** If the spectral predictor doesn't outperform simple baselines, we report that.
 
 ## Repository Structure
 
 ```
 dlp-grokking-boundary/
 ├── README.md
-├── LICENSE
-├── CITATION.cff
-├── requirements.txt
-├── AUDIT_REPORT.md           # Forensic audit of 199 prior runs
+├── LICENSE, CITATION.cff, requirements.txt
+├── AUDIT_REPORT.md           # Forensic audit of legacy runs
 ├── THEOREM_MAPPING.md        # Maps Takhanov theorem to experiments
 │
-├── paper/
-│   ├── paper.tex             # Manuscript (LaTeX)
-│   ├── paper.pdf             # Compiled manuscript
-│   ├── references.bib        # Bibliography
-│   └── figures/              # All manuscript figures
+├── paper/                     # Manuscript (LaTeX + PDF)
 │
 ├── src/
-│   ├── groups.py             # Cyclic group abstractions (additive + multiplicative)
-│   ├── datasets.py           # Matched isomorphic datasets from same latent manifest
-│   ├── representations.py    # Integer, bit, scalar tokenizers
-│   ├── models.py             # GrokkingTransformer (from Paper 1)
-│   ├── training.py           # Unified training loop (Paper 1 + Paper 2 optimization)
-│   └── phase_classifier.py   # Canonical phase definitions with sustained thresholds
+│   ├── groups.py              # Cyclic group abstractions
+│   ├── latent_manifests.py    # Canonical latent manifests
+│   ├── datasets.py            # Matched isomorphic datasets
+│   ├── models.py              # GrokkingTransformer
+│   ├── training.py            # Unified training loop
+│   ├── outcomes.py            # Canonical phase definitions (K=10 sustained)
+│   ├── checkpoints.py         # Checkpoint management
+│   ├── phase_classifier.py    # Legacy phase classifier
+│   │
+│   ├── encodings/             # Information-preserving encodings
+│   │   ├── identity_binary.py
+│   │   ├── gray.py
+│   │   ├── gf2_affine.py       # PRIMARY causal intervention
+│   │   ├── feistel.py          # OOD holdout
+│   │   └── atomic.py
+│   │
+│   ├── tasks/                 # Task definitions
+│   │   ├── fixed_base_parity.py
+│   │   ├── variable_base_full_log.py
+│   │   ├── additive_inverse.py
+│   │   └── modular_addition_control.py
+│   │
+│   ├── predictors/            # Prediction modules (to be built)
+│   │   ├── fourier.py
+│   │   ├── ntk.py
+│   │   ├── kernel_spectrum.py
+│   │   ├── gradients.py
+│   │   ├── pretraining_features.py
+│   │   ├── early_probe.py
+│   │   ├── timescale_models.py
+│   │   ├── phase_predictor.py
+│   │   └── baselines.py
+│   │
+│   ├── statistics/            # Statistical analysis (to be built)
+│   │   ├── survival.py
+│   │   ├── grouped_cv.py
+│   │   ├── bootstrap.py
+│   │   └── metrics.py
+│   │
+│   └── locking/               # Prediction lock infrastructure
+│       ├── create_lock.py
+│       ├── verify_lock.py
+│       └── hash_manifest.py
 │
-├── experiments/
-│   └── matched_isomorphic/
-│       └── run_core_40.py    # Core 40-run experiment (q=113)
-│
-├── scripts/
-│   ├── generate_figures.py   # Figure generation from results
-│   └── generate_audit_report.py  # Generate AUDIT_REPORT.md
+├── theory/                    # Theory track (to be built)
 │
 ├── manifests/
-│   └── latent_pairs/
-│       └── q113_manifest.csv # Canonical q=113 latent manifest
+│   ├── groups.csv             # 62 frozen groups with roles
+│   └── latent/                # Canonical latent manifests
 │
-└── results/
-    ├── stage00/              # Stage 0: MLP replication (90 runs)
-    ├── stage00b/             # Stage 0b: Theorem uniform (9 runs)
-    ├── stage01/              # Stage 1: Architecture bridge (18 runs)
-    ├── stage02/              # Stage 2: Grokking bridge (18 runs, re-interpreted)
-    ├── stage03/              # Stage 3: 2×2 discovery (64 runs)
-    └── matched_isomorphic/   # New: 40-run core experiment (in progress)
+├── predictions/               # Prediction files (locked before training)
+├── locks/                     # Prediction locks (append-only)
+│
+├── experiments/
+│   ├── CAL_A_clean_pilot/     # q=113, 4 encodings × 2 opt × 5 seeds
+│   ├── CAL_B_boundary_grid/   # 3 groups × 2 tasks × 4 enc × 3 frac × 3 seeds
+│   ├── CAL_C_capacity/        # 6 configs × 4 capacities × 5 seeds
+│   ├── CAL_D_optimization/    # 6 configs × 4 opt conditions × 5 seeds
+│   ├── CAL_R_random_labels/   # 6 configs × 4 capacities × 3 seeds
+│   ├── CONF_A_encoding_prediction/  # 3 q × 18 enc × 5 seeds (PRIMARY)
+│   ├── CONF_B_encoding_design/     # Search + construct encodings
+│   ├── CONF_C_ood_encoding/         # Feistel holdout
+│   └── CONF_D_isomorphic_demo/     # Additive vs multiplicative
+│
+├── legacy/                    # LEGACY_EXPLORATORY_V0 data
+│   ├── README.md
+│   └── legacy_40_status_*.csv
+│
+├── results/
+│   ├── stage00/ ... stage03/  # Legacy exploratory runs
+│   └── matched_isomorphic/    # Legacy 40-run experiment (quarantined)
+│
+└── reproduce/                # Reproduction scripts (to be built)
 ```
 
-## Experimental Design
+## Evidence Classes
 
-### Prior Experiments (199 runs, LUMI-G)
+| Class | Description | Use |
+|-------|-------------|-----|
+| LEGACY_EXPLORATORY | Pre-protocol runs | Debugging, calibration only |
+| CALIBRATION | Post-protocol calibration | Develop and fit predictor |
+| CONFIRMATORY | Blind prospective evaluation | Final proof, no refitting |
 
-| Stage | Description | Runs | Architecture | Task |
-|-------|-------------|------|--------------|------|
-| 0 | MLP replication | 90 | 2-layer MLP (1M params) | DLP parity bit, b=16-26 |
-| 0b | Theorem uniform | 9 | 2-layer MLP (1M params) | DLP parity bit, uniform dist. |
-| 1 | Architecture bridge | 18 | Bit-tokenizer Transformer (425k) | DLP parity, b=16-26 |
-| 2 | Grokking bridge (re-interpreted) | 18 | Bit-tokenizer Transformer (425k) | DLP parity with WD, b=16-26 |
-| 3 | 2×2 discovery | 64 | Bit-tokenizer Transformer (425k) | DLP, b=7-14 |
+## Pre-Registered Hypotheses
 
-### New: Matched Isomorphic Experiment (40 runs, local + LUMI-G)
-
-2 × 2 × 2 × 5 factorial at q=113:
-- Group: {additive (Z_113, +), multiplicative (subgroup of F_227*)}
-- Tokenizer: {atomic integer, binary bit}
-- Optimization: {Paper 1 (progressive WD), Paper 2 (fixed WD=0.3)}
-- Seeds: {42, 123, 456, 789, 2026}
-
-All runs use the same latent manifest, ensuring identical train/test membership and labels across both group realizations.
-
-## Reproduce
-
-```bash
-pip install -r requirements.txt
-
-# Generate figures from prior results
-python3 scripts/generate_figures.py
-
-# Generate audit report
-python3 scripts/generate_audit_report.py
-
-# Run the 40-run core experiment
-python3 experiments/matched_isomorphic/run_core_40.py
-```
+- **H1:** Pre-training spectral accessibility predicts time-to-generalization
+- **H2:** GF(2) bijections cause systematic learning differences
+- **H3:** High-accessibility encodings generalize faster on unseen groups
+- **H4:** Predictor can construct high-accessibility encodings
+- **H5:** If t=0 fails, early probe provides additional predictive information
 
 ## Citation
 
 ```bibtex
-@misc{vesterlund2026learnability,
-  title={The Discrete-Log Learnability Boundary: Representation, Scale, and Gradient Hardness in Isomorphic Cyclic Groups},
+@misc{vesterlund2026predicting,
+  title={Predicting the Discrete-Log Learnability Boundary: Representation, Spectral Accessibility, and Grokking},
   author={Vesterlund, David},
   year={2026},
   url={https://github.com/VesterlundCoder/dlp-grokking-boundary}
@@ -115,7 +133,3 @@ python3 experiments/matched_isomorphic/run_core_40.py
 ## License
 
 MIT License. See `LICENSE` for details.
-
-## Acknowledgments
-
-Compute resources provided by LUMI-G (EuroHPC JU), project `project_465003364`.
