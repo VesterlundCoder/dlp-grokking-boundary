@@ -1,0 +1,31 @@
+{
+  "actual_params": 424528,
+  "final": {
+    "elapsed_s": 4253.153528690338,
+    "epoch": 200000,
+    "step": 200000,
+    "test_bit_acc": 0.47776880860328674,
+    "test_exact": 0.47776880860328674,
+    "test_parity_acc": 0.47776880860328674,
+    "train_bit_acc": 0.9967690110206604,
+    "train_exact": 0.9967690110206604,
+    "train_loss": 0.017701176926493645,
+    "train_parity_acc": 0.9967690110206604,
+    "val_bit_acc": 0.5679611563682556,
+    "val_exact": 0.5679611563682556,
+    "val_parity_acc": 0.5679611563682556
+  },
+  "grok_delay": null,
+  "p": 4127,
+  "phase": "memorization_only",
+  "q": 2063,
+  "seed": 42,
+  "split": "pair_iid",
+  "t55": null,
+  "t75": null,
+  "t90": null,
+  "t99": null,
+  "t_mem": 1900,
+  "t_mid": null,
+  "task": "hidden_parity"
+}

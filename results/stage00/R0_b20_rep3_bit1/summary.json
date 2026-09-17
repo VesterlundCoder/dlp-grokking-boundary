@@ -1,0 +1,26 @@
+{
+  "actual_params": 1024002,
+  "final": {
+    "elapsed_s": 110.07984781265259,
+    "epoch": 2000,
+    "test_exact": 0.49133333563804626,
+    "test_loss": 6.610048294067383,
+    "train_exact": 1.0,
+    "train_loss": 6.232943050576978e-09
+  },
+  "grok_delay": null,
+  "paper_meta": {
+    "a": 91694,
+    "bits": 20,
+    "exact_code": true,
+    "low_bit": 1,
+    "p": 995591
+  },
+  "phase": "memorization_only",
+  "t55": null,
+  "t75": null,
+  "t90": null,
+  "t99": null,
+  "t_mem": 600,
+  "t_mid": null
+}

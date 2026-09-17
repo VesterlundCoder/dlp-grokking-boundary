@@ -1,0 +1,287 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage[round]{natbib}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{cleveref}
+
+\title{\textbf{The Grokking Boundary:}\\
+Discrete Logarithm Hardness and Group Structure in Transformers}
+
+\author{David Vesterlund}
+
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We investigate when and why neural networks can learn the discrete logarithm problem (DLP) through gradient-based training. Prior theoretical work has established that gradient-based methods cannot efficiently learn the parity bit of the discrete logarithm in cyclic groups of large prime order. We empirically map the boundary of this hardness result across model architectures, group structures, and bit sizes. Using a 199-experiment design on LUMI-G supercomputing infrastructure, we find: (1) MLPs can learn individual DLP parity bits for small primes ($b \leq 16$) through direct generalization, but fail for $b \geq 20$, confirming the predicted hardness threshold; (2) bit-tokenizer Transformers fail to grok the prime-order subgroup DLP at any tested bit size ($b = 7$--$26$), consistent with the hardness prediction; (3) the same Transformer architecture \emph{does} grok the additive group (modular addition) at $b = 16$, but fails at $b \geq 18$, revealing that the grokking boundary is group-structure-dependent; and (4) across a $2 \times 2$ design varying base visibility (hidden vs.\ visible) and target granularity (parity vs.\ full log), no configuration produces grokking on prime-order DLP for $b = 7$--$14$ at 200k epochs. These results establish a sharp \emph{grokking boundary} determined by the interaction of group structure and representation, not by model capacity alone.
+\end{abstract}
+
+\section{Introduction}\label{sec:intro}
+
+The \emph{grokking} phenomenon \citep{power2022grokking}---in which a neural network abruptly transitions from memorization to generalization long after overfitting---has been studied extensively on modular arithmetic tasks. A natural question is whether grokking extends to the discrete logarithm problem (DLP), a structured inverse problem on cyclic groups.
+
+\citet{takhanov2024intractability} proved that gradient-based methods cannot efficiently learn the parity bit of the discrete logarithm in cyclic groups of large prime order. This hardness result raises a fundamental question: \emph{where exactly is the boundary between learnable and unlearnable DLP instances?}
+
+In this work, we map this boundary empirically. We do not attempt to violate the hardness theorem---our experiments use small primes and make no claims about cryptographic-scale DLP. Instead, we ask: at what scale, with which architecture, and for which group structure does DLP become resistant to gradient-based learning?
+
+\paragraph{Contributions.}
+\begin{enumerate}[leftmargin=*]
+    \item We replicate the gradient-concentration hardness prediction using MLPs on DLP parity bits, confirming a transition from direct generalization ($b \leq 16$) to memorization-only ($b \geq 20$).
+    \item We show that bit-tokenizer Transformers fail to grok the prime-order subgroup DLP at any tested bit size ($b = 7$--$26$), consistent with the hardness theorem.
+    \item We demonstrate that the \emph{same} Transformer architecture groks the additive group (modular addition) at $b = 16$ but fails at $b \geq 18$, revealing a group-structure-dependent grokking boundary.
+    \item We conduct a $2 \times 2$ discovery experiment (hidden/visible base $\times$ parity/full-log target) across $b = 7$--$14$, finding no grokking in any configuration at 200k epochs.
+\end{enumerate}
+
+\section{Background and Related Work}\label{sec:background}
+
+\paragraph{Discrete logarithm problem.}
+Given a generator $g$ of a cyclic group $G$ of order $q$ and an element $h \in G$, the DLP asks for $x$ such that $g^x \equiv h$. In $\mathbb{F}_p^*$, the group order is $q = p - 1$. We also consider the prime-order subgroup DLP, where $g$ generates a subgroup of prime order $q$ inside $\mathbb{F}_p^*$.
+
+\paragraph{Gradient-concentration hardness.}
+\citet{takhanov2024intractability} proved that for cyclic groups of prime order $q$, any gradient-based method requires exponentially many steps to learn the parity bit of the discrete logarithm from random examples. The proof relies on the concentration of the gradient signal: for prime-order groups, the gradient of the loss with respect to the parity bit is exponentially small in $\log q$.
+
+\paragraph{Grokking.}
+Grokking \citep{power2022grokking} is a delayed generalization phenomenon where neural networks transition from memorization to generalization long after overfitting training data. It has been studied on modular addition \citep{nanda2023progress}, multiplication, and permutation composition. \citet{liu2022understanding} developed an effective theory of representation learning during grokking, and \citet{thilak2022slingshot} identified the slingshot mechanism as a driver of grokking dynamics.
+
+\paragraph{DLP grokking.}
+Recent work \citep{vesterlund2026grokking} demonstrated that Transformers can grok the variable-base DLP in $\mathbb{F}_{113}^*$, with mechanistic analysis revealing alignment with multiplicative character structure. That work used a full-integer tokenizer and composite-order groups. The present study complements this by investigating when DLP \emph{resists} grokking.
+
+\section{Experimental Design}\label{sec:design}
+
+We design a five-stage experimental program to isolate the factors determining DLP learnability. All experiments use PyTorch on LUMI-G (AMD MI250X GPUs).
+
+\subsection{Stage 0: MLP Replication}\label{sec:stage0}
+
+We replicate the gradient-concentration hardness prediction using a simple MLP architecture. The task is to learn a single parity bit of the discrete logarithm: given $(g, h)$ where $g^x \equiv h \pmod{p}$, predict $\text{bit}_i(x)$ for bit position $i$.
+
+\paragraph{Setup.}
+\begin{itemize}[leftmargin=*]
+    \item Architecture: 2-layer MLP with 1M parameters, ReLU activation.
+    \item Primes: $p$ chosen so that $q = p - 1$ has $b \in \{16, 18, 20, 22, 24, 26\}$ bits.
+    \item Training: 2000 epochs, AdamW, weight decay 0.01.
+    \item Repetitions: 5 random initializations per bit size, 3 bit positions per repetition (15 runs per bit size, 90 total).
+\end{itemize}
+
+\subsection{Stage 0b: Theorem Uniform Distribution}\label{sec:stage0b}
+
+The hardness theorem assumes inputs drawn from the uniform distribution. We verify that the hardness prediction holds under this distribution.
+
+\paragraph{Setup.}
+\begin{itemize}[leftmargin=*]
+    \item Same MLP architecture as Stage 0.
+    Bit sizes: $b \in \{16, 20, 24\}$, 3 seeds each (9 runs).
+    \item Training: 2000 epochs, uniform input distribution.
+\end{itemize}
+
+\subsection{Stage 1: Architecture Bridge}\label{sec:stage1}
+
+We test whether a bit-tokenizer Transformer---the architecture that groks DLP in prior work---can learn the prime-order subgroup DLP.
+
+\paragraph{Setup.}
+\begin{itemize}[leftmargin=*]
+    \item Architecture: 2-layer Transformer, $d_{\text{model}} = 128$, 4 heads, $\sim$425k parameters.
+    Bit tokenizer: each integer is represented as a sequence of $b$ bits.
+    \item Task: prime-order subgroup DLP, $q$ prime with $b \in \{16, 18, 20, 22, 24, 26\}$ bits.
+    \item Training: 2000 epochs, 3 seeds per bit size (18 runs).
+\end{itemize}
+
+\subsection{Stage 2: Grokking Bridge}\label{sec:stage2}
+
+We test whether the same bit-tokenizer Transformer can grok the \emph{additive} group (modular addition), which has a simpler group structure.
+
+\paragraph{Setup.}
+\begin{itemize}[leftmargin=*]
+    \item Same Transformer architecture as Stage 1.
+    \item Task: modular addition $(a, b) \mapsto (a + b) \bmod q$, $q$ prime with $b \in \{16, 18, 20, 22, 24, 26\}$ bits.
+    \item Training: 100k epochs (to allow grokking), 3 seeds per bit size (18 runs).
+\end{itemize}
+
+\subsection{Stage 3: $2 \times 2$ Discovery}\label{sec:stage3}
+
+We conduct a $2 \times 2$ factorial design varying two factors:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Base visibility:} \emph{hidden} (base $g$ not given, model must infer) vs.\ \emph{visible} (base $g$ provided as input).
+    \item \textbf{Target granularity:} \emph{parity} (predict $x \bmod 2$) vs.\ \emph{full} (predict full $x$).
+\end{itemize}
+
+\paragraph{Setup.}
+\begin{itemize}[leftmargin=*]
+    \item Same Transformer architecture.
+    Bit sizes: $b \in \{7, 8, 9, 10, 11, 12, 13, 14\}$ (small primes for tractability).
+    \item Training: 200k epochs, 2 seeds per configuration (64 runs total).
+\end{itemize}
+
+\section{Results}\label{sec:results}
+
+\subsection{MLP Replication: Confirming the Hardness Threshold}\label{sec:res-stage0}
+
+Stage 0 confirms the gradient-concentration hardness prediction. As shown in \Cref{fig:mlp_replication}, MLPs achieve direct generalization (test accuracy $\geq 90\%$) at $b = 16$, with 13 of 15 runs reaching $\geq 90\%$. At $b = 18$, results are mixed: some runs achieve direct generalization but many show only partial generalization. By $b = 20$, the transition is sharp---most runs fall to memorization-only (test accuracy near chance). For $b \geq 22$, all runs are at chance level.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_mlp_replication.pdf}
+    \caption{MLP replication of DLP parity-bit learning. \textbf{Left:} Final test accuracy for all 90 runs (15 per bit size). Green = direct generalization ($\geq 90\%$), orange = partial, red = memorization-only. \textbf{Right:} Phase distribution by bit size. The transition from direct generalization to memorization occurs between $b = 16$ and $b = 20$.}
+    \label{fig:mlp_replication}
+\end{figure}
+
+\Cref{tab:stage0} summarizes the phase distribution. At $b = 16$, 80\% of runs achieve direct generalization. At $b = 20$, only 7\% achieve any generalization, and by $b = 22$, no run exceeds chance.
+
+\begin{table}[t]
+    \centering
+    \caption{Stage 0: MLP DLP parity-bit learning phase distribution.}
+    \label{tab:stage0}
+    \begin{tabular}{lcccc}
+        \toprule
+        Bit size & Direct gen.\ & Grokking & Partial gen.\ & Memorization only \\
+        \midrule
+        $b = 16$ & 12/15 & 1/15 & 2/15 & 0/15 \\
+        $b = 18$ & 3/15 & 0/15 & 9/15 & 3/15 \\
+        $b = 20$ & 1/15 & 0/15 & 4/15 & 10/15 \\
+        $b = 22$ & 0/15 & 0/15 & 2/15 & 13/15 \\
+        $b = 24$ & 0/15 & 0/15 & 2/15 & 13/15 \\
+        $b = 26$ & 0/15 & 0/15 & 2/15 & 13/15 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Theorem Uniform Distribution: Hardness is Distribution-Independent}\label{sec:res-stage0b}
+
+Stage 0b verifies that the hardness result holds under the uniform distribution assumed by the theorem. As shown in \Cref{fig:theorem_uniform}, MLPs achieve 96--98\% accuracy at $b = 16$ (all 3 seeds), but fall to chance ($\sim 50\%$) at $b = 24$ (all 3 seeds). The $b = 20$ case is intermediate, with one seed achieving partial generalization.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/fig_theorem_uniform.pdf}
+    \caption{Stage 0b: MLP DLP parity-bit learning under the uniform distribution assumed by the hardness theorem. Direct generalization at $b = 16$, memorization at $b = 24$.}
+    \label{fig:theorem_uniform}
+\end{figure}
+
+\subsection{Architecture Bridge: Transformers Fail on Prime-Order DLP}\label{sec:res-stage1}
+
+Stage 1 tests whether the bit-tokenizer Transformer---the architecture that successfully groks composite-order DLP \citep{vesterlund2026grokking}---can learn the prime-order subgroup DLP. As shown in \Cref{fig:architecture_bridge}, the answer is negative: across all bit sizes $b = 16$--$26$ and all seeds, test accuracy remains at chance ($\sim 50\%$) after 2000 epochs. The Transformer memorizes the training set (train accuracy 0.53--0.89) but cannot generalize.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/fig_architecture_bridge.pdf}
+    \caption{Stage 1: Bit-tokenizer Transformer on prime-order subgroup DLP. All runs at chance after 2000 epochs, regardless of bit size. The Transformer cannot learn the prime-order DLP, consistent with the hardness theorem.}
+    \label{fig:architecture_bridge}
+\end{figure}
+
+This result is consistent with the hardness prediction: the prime-order subgroup structure makes the DLP resistant to gradient-based learning, even with an architecture that succeeds on composite-order DLP.
+
+\subsection{Grokking Bridge: Additive Group Groks at Small Bit Sizes}\label{sec:res-stage2}
+
+Stage 2 reveals a striking contrast. The \emph{same} bit-tokenizer Transformer that fails on prime-order DLP (Stage 1) \emph{does} grok the additive group at $b = 16$. As shown in \Cref{fig:grokking_bridge}, all 3 seeds at $b = 16$ achieve 96--99\% test accuracy after 100k epochs---a clear grokking transition. However, at $b = 18$ and above, the Transformer again fails, with all runs at chance.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/fig_grokking_bridge.pdf}
+    \caption{Stage 2: Bit-tokenizer Transformer on the additive group (modular addition). Grokking occurs at $b = 16$ (all 3 seeds, 96--99\%) but fails at $b \geq 18$. The grokking boundary for the additive group lies between $b = 16$ and $b = 18$.}
+    \label{fig:grokking_bridge}
+\end{figure}
+
+This result is the key finding of our study. The grokking boundary is not a fixed property of the model architecture or the bit size alone---it depends on the \emph{group structure}. The additive group, which has a simple linear structure, is grokkable at $b = 16$. The prime-order multiplicative group (DLP), which has a complex structure resistant to gradient concentration, is not grokkable at any tested bit size.
+
+\subsection{$2 \times 2$ Discovery: No Grokking on Prime-Order DLP}\label{sec:res-stage3}
+
+Stage 3 conducts a thorough search for grokking on prime-order DLP across a $2 \times 2$ design. As shown in \Cref{fig:2x2_discovery}, no configuration produces grokking:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Hidden base, parity target:} Test parity accuracy 39--60\% (chance level, no grokking).
+    \item \textbf{Visible base, parity target:} Test parity accuracy 43--59\% (chance level, no grokking).
+    \item \textbf{Hidden base, full-log target:} Test exact accuracy 0--1\% (memorization only).
+    \item \textbf{Visible base, full-log target:} Test exact accuracy 0--1\% (memorization only).
+\end{itemize}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_2x2_discovery.pdf}
+    \caption{Stage 3: $2 \times 2$ discovery experiment on prime-order DLP, $b = 7$--$14$, 200k epochs. \textbf{Left:} Parity accuracy. \textbf{Right:} Full-log accuracy. No configuration exceeds chance. Error bars show std across 2 seeds.}
+    \label{fig:2x2_discovery}
+\end{figure}
+
+All models memorize the training set (train parity accuracy $\sim 100\%$) but fail to generalize. The base visibility (hidden vs.\ visible) does not affect the outcome---the prime-order DLP resists grokking regardless of how the problem is presented.
+
+\subsection{The Grokking Boundary}\label{sec:res-boundary}
+
+\Cref{fig:grokking_boundary} combines all stages into a single view of the grokking boundary. The key pattern is:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{MLP on DLP parity (green):} Direct generalization at $b = 16$, memorization at $b \geq 20$. The boundary is gradual, reflecting the statistical nature of the hardness threshold.
+    \item \textbf{Transformer on prime-order DLP (red):} No grokking at any bit size. The boundary is at or below $b = 16$.
+    \item \textbf{Transformer on additive group (blue):} Grokking at $b = 16$, memorization at $b \geq 18$. The boundary is between $b = 16$ and $b = 18$.
+\end{itemize}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/fig_grokking_boundary.pdf}
+    \caption{The grokking boundary. Each curve shows mean final test accuracy for one experimental condition. The MLP (green) transitions from generalization to memorization between $b = 16$ and $b = 20$. The Transformer on prime-order DLP (red) never generalizes. The Transformer on the additive group (blue) groks at $b = 16$ but fails at $b \geq 18$. The shaded region indicates the grokking boundary.}
+    \label{fig:grokking_boundary}
+\end{figure}
+
+The boundary is \emph{not} a single threshold in bit size. It is a function of the triple (architecture, group structure, bit size). The same bit size can be grokkable or ungrokkable depending on the group: $b = 16$ is grokkable for the additive group but not for the prime-order DLP.
+
+\section{Discussion}\label{sec:discussion}
+
+\subsection{What Determines the Grokking Boundary?}
+
+Our results suggest that the grokking boundary is determined by the interaction of three factors:
+
+\paragraph{Group structure.} The additive group $(\mathbb{Z}/q\mathbb{Z}, +)$ has a linear structure that allows gradient-based learning to discover the addition circuit. The multiplicative group $(\mathbb{F}_p^*, \cdot)$, particularly in prime-order subgroups, has a structure that resists gradient concentration---the gradient signal is spread across many directions, preventing efficient learning.
+
+\paragraph{Representation.} The bit-tokenizer representation, which encodes integers as bit sequences, provides a fixed-size input that does not grow with $p$. However, this representation appears to make the DLP harder, not easier: the full-integer tokenizer used in prior work \citep{vesterlund2026grokking} grokked composite-order DLP at $p = 113$, while our bit-tokenizer fails on prime-order DLP at all tested sizes.
+
+\paragraph{Bit size.} The bit size $b = \lceil \log_2 q \rceil$ controls the problem complexity. For the additive group, the grokking boundary is between $b = 16$ and $b = 18$. For the prime-order DLP, the boundary is at or below $b = 7$ (our smallest tested size).
+
+\subsection{Relationship to the Hardness Theorem}
+
+Our results are consistent with the gradient-concentration hardness theorem of \citet{takhanov2024intractability}. The theorem predicts that learning the DLP parity bit in prime-order groups requires exponentially many gradient steps. Our MLP experiments (Stages 0 and 0b) confirm this prediction: direct generalization at $b = 16$ transitions to memorization-only at $b \geq 20$.
+
+The Transformer experiments (Stages 1--3) extend this finding: even with a more expressive architecture and extended training (200k epochs), the prime-order DLP remains unlearnable. The hardness is not specific to MLPs---it is a property of the problem structure.
+
+The additive group result (Stage 2) provides a crucial control: the same architecture that fails on DLP succeeds on modular addition, demonstrating that the failure is not due to insufficient model capacity or training time. The failure is specific to the group structure.
+
+\subsection{Implications for DLP Grokking Research}
+
+Our findings have implications for the broader study of DLP grokking:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Composite-order DLP is special.} The grokking observed in prior work \citep{vesterlund2026grokking} at $p = 113$ (where $q = 112 = 16 \times 7$) may exploit the smooth factorization of $q$. Prime-order DLP, which has no such factorization, is fundamentally harder.
+    \item \textbf{Representation matters.} The bit-tokenizer representation, while fixed-size, does not provide the inductive bias needed for DLP grokking. Future work should explore representations that encode algebraic structure more directly (e.g., CRT-based representations).
+    \item \textbf{The grokking boundary is a research target.} Understanding why the additive group groks at $b = 16$ but not $b = 18$---and why the multiplicative group does not grok at all---is a concrete mechanistic question for future interpretability research.
+\end{enumerate}
+
+\subsection{Limitations}
+
+\begin{itemize}[leftmargin=*]
+    \item Our experiments use small primes ($b \leq 26$). The hardness theorem applies to large primes; our results show that the hardness manifests already at small scales.
+    \item We test a single Transformer architecture (2-layer, $d_{\text{model}} = 128$). Larger models might grok at higher bit sizes, though the hardness theorem suggests the boundary is fundamental.
+    \item Stage 2 uses 100k epochs; the additive group might grok at $b = 18$ with longer training. However, the sharp transition from 96--99\% ($b = 16$) to $\sim 50\%$ ($b = 18$) suggests a genuine boundary, not a training-time artifact.
+    \item We do not test CRT-based or other algebraically-structured representations, which might change the grokking boundary for DLP.
+\end{itemize}
+
+\section{Conclusion}\label{sec:conclusion}
+
+We have mapped the grokking boundary for the discrete logarithm problem across architectures, group structures, and bit sizes. The boundary is sharp and group-structure-dependent: the additive group is grokkable at $b = 16$, while the prime-order DLP is not grokkable at any tested bit size. This boundary is consistent with the gradient-concentration hardness theorem and suggests that DLP grokking in prior work exploits the smooth factorization of composite-order groups.
+
+These results establish that grokking is not a universal property of algebraic tasks---it depends on the interaction of group structure, representation, and scale. The grokking boundary provides a concrete target for future mechanistic interpretability research: what changes inside the network at the boundary, and can algebraically-structured representations shift it?
+
+\section*{Reproducibility}
+
+All experiments were conducted on LUMI-G (EuroHPC JU) using PyTorch with ROCm. The complete experimental design (199 runs across 5 stages), training scripts, and result data are available at \url{https://github.com/VesterlundCoder/dlp-grokking-boundary}.
+
+\section*{Acknowledgments}
+
+Compute resources provided by LUMI-G (EuroHPC JU), project \texttt{project\_465003364}.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

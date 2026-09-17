@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# OS
+.DS_Store
+
+# Compiled LaTeX (keep .tex, .bib, .pdf)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.toc
+*.out
+
+# Logs
+*.log
