@@ -18,3 +18,10 @@ __pycache__/
 
 # Logs
 *.log
+
+# Large results (keep code, not raw metrics)
+results/matched_isomorphic/run_log.txt
+results/*/checkpoint*
+
+# Checkpoints
+checkpoints/
