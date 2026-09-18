@@ -39,6 +39,11 @@ class TrainConfig:
     early_stop_patience: int = 100
     early_stop_threshold: float = 0.99
 
+    # Probe/resume protocol (Paper 2)
+    probe_steps: int = 0       # 0 = no probe; >0 = pause after this many steps
+    resume_from_probe: bool = False  # resume from probe checkpoint
+    probe_checkpoint_path: str = ""  # path to probe checkpoint for resume
+
     # Optimization regime
     optimizer: str = "adamw"  # "adam" or "adamw"
     weight_decay: float = 0.0
@@ -107,6 +112,10 @@ def train(
 ) -> dict:
     """Train a GrokkingTransformer on the given datasets.
 
+    Supports probe/resume protocol:
+        - If probe_steps > 0: train for probe_steps, save checkpoint, return.
+        - If resume_from_probe: load probe checkpoint, continue training.
+
     Returns a dict with final metrics and the path to the metrics file.
     """
     # Setup
@@ -131,6 +140,14 @@ def train(
     n_params = model.count_parameters()
     n_core = model.core_parameters()
 
+    # Resume from probe checkpoint if specified
+    start_epoch = 0
+    if config.resume_from_probe and config.probe_checkpoint_path:
+        ckpt = torch.load(config.probe_checkpoint_path, map_location=device, weights_only=False)
+        model.load_state_dict(ckpt["model_state_dict"])
+        start_epoch = ckpt.get("epoch", config.probe_steps)
+        print(f"[{config.run_id}] Resumed from probe at epoch {start_epoch}")
+
     # Optimizer
     if config.progressive_wd:
         current_wd = config.wd_start
@@ -141,6 +158,11 @@ def train(
         optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, weight_decay=current_wd)
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr, weight_decay=current_wd)
+
+    if config.resume_from_probe and config.probe_checkpoint_path:
+        ckpt = torch.load(config.probe_checkpoint_path, map_location=device, weights_only=False)
+        if "optimizer_state_dict" in ckpt:
+            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
 
     criterion = nn.CrossEntropyLoss()
 
@@ -171,7 +193,9 @@ def train(
 
     t0 = time.time()
 
-    for epoch in range(config.epochs):
+    end_epoch = config.epochs if not config.probe_steps else config.probe_steps
+
+    for epoch in range(start_epoch, end_epoch):
         model.train()
 
         # Forward
@@ -181,7 +205,21 @@ def train(
         # Backward
         optimizer.zero_grad()
         loss.backward()
+
+        # Gradient norm (before clipping, before step)
+        grad_norm = 0.0
+        for p in model.parameters():
+            if p.grad is not None:
+                grad_norm += p.grad.data.norm(2).item() ** 2
+        grad_norm = grad_norm ** 0.5
+
         optimizer.step()
+
+        # Weight norm
+        weight_norm = 0.0
+        for p in model.parameters():
+            weight_norm += p.data.norm(2).item() ** 2
+        weight_norm = weight_norm ** 0.5
 
         # Progressive WD ramp (Paper 1 style)
         if config.progressive_wd and mem_epoch is not None:
@@ -193,7 +231,7 @@ def train(
                     pg["weight_decay"] = current_wd
 
         # Evaluation
-        if (epoch + 1) % config.eval_interval == 0 or epoch == 0:
+        if (epoch + 1) % config.eval_interval == 0 or epoch == 0 or epoch == end_epoch - 1:
             train_acc = compute_accuracy(model, train_dataset, tokenizer, device)
             test_acc = compute_accuracy(model, test_dataset, tokenizer, device)
 
@@ -213,6 +251,8 @@ def train(
                 "train_acc": train_acc,
                 "test_acc": test_acc,
                 "loss": loss.item(),
+                "grad_norm": grad_norm,
+                "weight_norm": weight_norm,
                 "wd": current_wd,
                 "lr": current_lr,
                 "elapsed_s": elapsed,
@@ -222,14 +262,37 @@ def train(
             with open(metrics_path, "a") as f:
                 f.write(json.dumps(metric) + "\n")
 
-            # Early stopping
-            if best_test >= config.early_stop_threshold and no_improve >= config.early_stop_patience:
+            # Early stopping (only in full training, not probe)
+            if not config.probe_steps and best_test >= config.early_stop_threshold and no_improve >= config.early_stop_patience:
                 break
 
             # Print progress
-            if (epoch + 1) % (config.eval_interval * 10) == 0 or epoch == 0:
+            if (epoch + 1) % (config.eval_interval * 10) == 0 or epoch == 0 or epoch == end_epoch - 1:
                 print(f"[{config.run_id}] Epoch {epoch+1:6d} | train={train_acc:.4f} test={test_acc:.4f} "
-                      f"loss={loss.item():.4f} wd={current_wd:.4f} t={elapsed:.1f}s", flush=True)
+                      f"loss={loss.item():.4f} grad={grad_norm:.4f} wnorm={weight_norm:.2f} "
+                      f"wd={current_wd:.4f} t={elapsed:.1f}s", flush=True)
+
+    # Save probe checkpoint if in probe mode
+    if config.probe_steps:
+        probe_ckpt_path = output_dir / "probe_checkpoint.pt"
+        torch.save({
+            "epoch": end_epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "config": config.__dict__,
+            "metrics": metrics,
+        }, probe_ckpt_path)
+        print(f"[{config.run_id}] Probe checkpoint saved: {probe_ckpt_path}")
+
+    # Save final checkpoint
+    final_ckpt_path = output_dir / "final_checkpoint.pt"
+    torch.save({
+        "epoch": end_epoch,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "config": config.__dict__,
+        "metrics": metrics,
+    }, final_ckpt_path)
 
     # Final summary
     final = metrics[-1] if metrics else {}
@@ -243,6 +306,8 @@ def train(
         "final_test": final.get("test_acc", 0),
         "total_epochs": final.get("epoch", 0),
         "total_time_s": final.get("elapsed_s", 0),
+        "is_probe": bool(config.probe_steps),
+        "mem_epoch": mem_epoch,
     }
     with open(output_dir / "summary.json", "w") as f:
         json.dump(summary, f, indent=2)

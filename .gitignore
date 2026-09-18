@@ -22,6 +22,10 @@ __pycache__/
 # Large results (keep code, not raw metrics)
 results/matched_isomorphic/run_log.txt
 results/*/checkpoint*
+results/smoke/
 
 # Checkpoints
 checkpoints/
+
+# CAL_A experiment outputs (keep p0_features.csv and outcomes.csv via force-add)
+results/CAL_A/*/
